@@ -49,7 +49,7 @@ def generate_report(code="sh600519", bs_code="sh.600519"):
     """
 
     resp = client.chat.completions.create(
-        model="deepseek-chat",
+        model="deepseek-flash",
         messages=[{"role": "user", "content": prompt}]
     )
     t4 = time.time()
