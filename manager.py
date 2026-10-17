@@ -11,7 +11,6 @@ MANAGER_PROMPT = """
 
 def summarize_reports(tech_report: str, fund_report: str, risk_report: str) -> str:
     """Manager 专用：接收三份报告，输出最终综合报告"""
-    print("  -> [Manager] 首席分析师正在汇总三位专家意见...")
 
     summary = ask_llm(
         system_prompt=MANAGER_PROMPT,
