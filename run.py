@@ -41,7 +41,8 @@ if __name__ == "__main__":
         bs_code = code[:2] + "." + code[2:]
         result = app.invoke({"code": code, "bs_code": bs_code})
         t2 = time.time()
-        print(f"[计时] 分析+LLM: {t2 - t1:.2f}秒")
+        print(f"[计时] 图流转+LLM: {t2 - t1:.2f}秒")
+        print("\n最终报告\n")
         print(result["report"])
 
     # 程序结束时登出 Baostock，关闭 socket

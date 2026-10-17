@@ -11,18 +11,25 @@
 
 ## 架构
 
-```
+本项目采用 **多智能体（Multi-Agent）协作架构**，通过 LangGraph 进行流程编排：
+
+```text
 run.py              # 入口：接收用户输入
-graph.py            # LangGraph 编排
-agents/
-├── technical.py    # 技术面分析
-├── fundamental.py  # 基本面分析
-├── risk.py         # 风控分析
-└── report.py       # LLM 汇总
-data/
-├── realtime.py     # 新浪接口
-├── valuation.py    # 腾讯接口
-└── history.py      # Baostock
+graph.py            # LangGraph 编排：串联各个 Agent 与 Manager
+manager.py          # 首席分析师：综合各方意见生成最终报告
+agents/             # 智能体层：每个 Agent 都有独立的大模型 Prompt 和思考逻辑
+├── base.py         # LLM 统一底座
+├── technical.py    # 技术面 Agent
+├── fundamental.py  # 基本面 Agent
+└── risk.py         # 风控 Agent
+tools/              # 工具层：纯数据计算函数（被 Agent 调用）
+├── tech_tools.py   # 均线等计算
+├── fund_tools.py   # 估值计算
+└── risk_tools.py   # 波动率计算
+data/               # 数据层：外部接口获取
+├── realtime.py     # 新浪实时
+├── valuation.py    # 腾讯 PE/PB
+└── history.py      # Baostock 历史日线
 ```
 
 ## 环境要求

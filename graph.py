@@ -1,33 +1,43 @@
 from langgraph.graph import StateGraph, END
 from typing import TypedDict
-from agents.technical import analyze_technical
-from agents.fundamental import analyze_fundamental
-from agents.risk import analyze_risk
-from agents.report import generate_report
+from agents.technical import run_technical_agent
+from agents.fundamental import run_fundamental_agent
+from agents.risk import run_risk_agent
+from manager import summarize_reports  # 引入 Manager
 
 
 class State(TypedDict):
     code: str
     bs_code: str
-    technical: dict
-    fundamental: dict
-    risk: dict
+    technical: str
+    fundamental: str
+    risk: str
     report: str
 
 
 def node_technical(state: State):
-    return {"technical": analyze_technical(state["bs_code"])}
+    print("  -> [Graph] 调度技术面 Agent...")
+    return {"technical": run_technical_agent(state["bs_code"])}
 
 def node_fundamental(state: State):
-    return {"fundamental": analyze_fundamental(state["code"])}
+    print("  -> [Graph] 调度基本面 Agent...")
+    return {"fundamental": run_fundamental_agent(state["code"])}
 
 def node_risk(state: State):
-    return {"risk": analyze_risk(state["bs_code"])}
+    print("  -> [Graph] 调度风控 Agent...")
+    return {"risk": run_risk_agent(state["bs_code"])}
 
 def node_report(state: State):
-    return {"report": generate_report(state["code"], state["bs_code"])}
+    # 把三个 Agent 的结果交给 Manager 汇总
+    final_report = summarize_reports(
+        tech_report=state["technical"],
+        fund_report=state["fundamental"],
+        risk_report=state["risk"]
+    )
+    return {"report": final_report}
 
 
+# 构建图
 workflow = StateGraph(State)
 
 workflow.add_node("technical", node_technical)
@@ -46,4 +56,5 @@ app = workflow.compile()
 
 if __name__ == "__main__":
     result = app.invoke({"code": "sh600519", "bs_code": "sh.600519"})
+    print("\n最终报告\n")
     print(result["report"])
