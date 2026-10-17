@@ -1,5 +1,6 @@
 import os
 import time
+import re
 import pandas as pd
 import akshare as ak
 import baostock as bs
@@ -11,13 +12,18 @@ CACHE_FILE = "stock_list_cache.csv"
 
 def find_code(user_input):
     global _stock_list
-    user_input = user_input.strip()
+    user_input = user_input.strip().upper()
 
-    # 1. 如果已经是代码，直接返回
-    if user_input.startswith(("sh", "sz")) or user_input.isdigit():
-        return user_input
+    # 1. 如果是带字母的代码，或者纯数字代码，直接返回
+    if user_input.startswith(("SH", "SZ")) or user_input.isdigit():
+        return user_input.lower()
 
-    # 2. 加载股票列表（带每日缓存）
+    # 2. 清洗前缀：把开头的 XD, XR, DR, N, C 去掉
+    clean_input = re.sub(r'^(XD|XR|DR|N|C)', '', user_input).strip()
+    if not clean_input:
+        clean_input = user_input
+
+    # 3. 加载股票列表（带每日缓存机制）
     if _stock_list is None:
         need_download = False
         if not os.path.exists(CACHE_FILE):
@@ -42,27 +48,48 @@ def find_code(user_input):
         else:
             _stock_list = pd.read_csv(CACHE_FILE)
 
-    # 3. 匹配逻辑（绝对不能漏！）
-    match = _stock_list[_stock_list["name"] == user_input]
-    if match.empty:
-        match = _stock_list[_stock_list["name"].str.contains(user_input, na=False)]
+    # 4. 匹配逻辑（智能模糊搜索）
+    # 第一层：精确匹配
+    match = _stock_list[_stock_list["name"] == clean_input]
 
+    # 第二层：前缀匹配（比如输入"中国平"，匹配"中国平安"）
+    if match.empty:
+        match = _stock_list[_stock_list["name"].str.startswith(clean_input, na=False)]
+
+    # 第三层：包含匹配（比如输入"平安"，匹配"中国平安"）
+    if match.empty:
+        match = _stock_list[_stock_list["name"].str.contains(clean_input, na=False)]
+
+    # 第四层：逆向截断匹配（解决除权截断，比如"中国巨石"去匹配表里的"XD中国巨"）
+    if match.empty:
+        for length in range(len(clean_input) - 1, 1, -1):
+            short_input = clean_input[:length]
+            match = _stock_list[_stock_list["name"].str.contains(short_input, na=False)]
+            if not match.empty:
+                break
+
+    # 终极判定：没找到
     if match.empty:
         print(f"未找到股票：{user_input}")
         return None
 
-    # 4. 提取代码并转换格式
-    code = match.iloc[0]["code"]
+    # 终极判定：匹配到多个，让用户自己选（防止瞎猜）
+    if len(match) > 1:
+        print(f"您输入的 '{user_input}' 匹配到了多只股票，请指明具体是哪一只：")
+        # 最多展示前 5 个
+        for idx, row in match.head(5).iterrows():
+            print(f"  - {row['name']} ({row['code']})")
+        return None
 
-    # 如果从 CSV 读出来的是数字，转成字符串并补齐 6 位（防止 000001 变成 1）
-    code = str(code).zfill(6)
+    # 5. 提取代码并格式化（如果只有唯一结果，直接提取）
+    code = str(match.iloc[0]["code"]).zfill(6)
 
     if code.startswith("6"):
         return "sh" + code
     elif code.startswith(("0", "3")):
         return "sz" + code
     else:
-        return "bj" + code  # 北交所
+        return "bj" + code
 
 
 if __name__ == "__main__":
@@ -81,5 +108,8 @@ if __name__ == "__main__":
         print("\n最终报告\n")
         print(result["report"])
 
-    # 程序结束时登出 Baostock，关闭 socket
-    bs.logout()
+    # 程序结束时登出 Baostock，安全保护
+    try:
+        bs.logout()
+    except Exception:
+        pass
