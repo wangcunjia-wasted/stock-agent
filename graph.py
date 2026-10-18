@@ -3,6 +3,7 @@ from typing import TypedDict
 from agents.technical import run_technical_agent
 from agents.fundamental import run_fundamental_agent
 from agents.risk import run_risk_agent
+from agents.news import run_news_agent
 from manager import summarize_reports
 
 
@@ -12,6 +13,7 @@ class State(TypedDict):
     technical: str
     fundamental: str
     risk: str
+    news: str
     report: str
 
 
@@ -27,39 +29,41 @@ def node_risk(state: State):
     print("  -> [Graph] 风控 Agent 启动...")
     return {"risk": run_risk_agent(state["bs_code"])}
 
+def node_news(state: State):
+    print("  -> [Graph] 新闻面 Agent 启动...")
+    # 传两个参数进去
+    return {"news": run_news_agent(state["code"][-6:], state["bs_code"])}
+
 def node_report(state: State):
-    print("  -> [Manager] 首席分析师正在汇总三位专家意见...")
-    summary = summarize_reports(
+    final_report = summarize_reports(
         tech_report=state["technical"],
         fund_report=state["fundamental"],
-        risk_report=state["risk"]
+        risk_report=state["risk"],
+        news_report=state["news"]
     )
-    return {"report": summary}
+    return {"report": final_report}
 
 
-# 构建图
 workflow = StateGraph(State)
 
-# 1. 添加节点
 workflow.add_node("technical", node_technical)
 workflow.add_node("fundamental", node_fundamental)
 workflow.add_node("risk", node_risk)
+workflow.add_node("news", node_news)
 workflow.add_node("report", node_report)
 
-# 2. 设置并行：让三个节点作为图的入口
-# 在 LangGraph 中，只要节点没有入边，并且被连接到同一个后继节点，它们就会并行执行。
-# 我们可以用一个虚拟的 "start" 节点来分发。
+# 虚拟起点
 workflow.add_node("start", lambda state: state)
-
 workflow.set_entry_point("start")
+
+# 并行分发
 workflow.add_edge("start", "technical")
 workflow.add_edge("start", "fundamental")
 workflow.add_edge("start", "risk")
+workflow.add_edge("start", "news")
 
-# 3. 汇聚：三个节点的结果都送给 report
-# 汇聚：等这三个节点全部执行完毕，统一触发一次 report
-workflow.add_edge(["technical", "fundamental", "risk"], "report")
-
+# 汇聚
+workflow.add_edge(["technical", "fundamental", "risk", "news"], "report")
 workflow.add_edge("report", END)
 
 app = workflow.compile()

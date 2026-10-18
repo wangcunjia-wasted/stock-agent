@@ -2,24 +2,30 @@ import baostock as bs
 import pandas as pd
 from datetime import datetime, timedelta
 import time
+import threading
 
 _logged_in = False
 _cache = {}
+# 1. 引入线程锁
+_lock = threading.Lock()
 
 
 def _ensure_login():
     global _logged_in
-    if not _logged_in:
-        try:
-            bs.login()
-            _logged_in = True
-        except Exception as e:
-            print(f"[警告] Baostock 登录失败: {e}")
+    # 加锁保护登录过程
+    with _lock:
+        if not _logged_in:
+            try:
+                bs.login()
+                _logged_in = True
+            except Exception as e:
+                print(f"[警告] Baostock 登录失败: {e}")
 
 
 def get_history(code="sh.600519"):
     _ensure_login()
 
+    # 快速检查缓存（不需要加锁，因为读字典是线程安全的）
     if code in _cache:
         return _cache[code]
 
@@ -29,28 +35,31 @@ def get_history(code="sh.600519"):
     # 最多重试 3 次
     for attempt in range(3):
         try:
-            rs = bs.query_history_k_data_plus(code,
-                                              "date,close,volume,high,low",
-                                              start_date=start_date,
-                                              end_date=end_date,
-                                              frequency="d",
-                                              adjustflag="2")
-            data_list = []
-            while (rs.error_code == '0') & rs.next():
-                data_list.append(rs.get_row_data())
+            # 2. 加锁保护网络请求，强制并发线程在这里排队
+            with _lock:
+                rs = bs.query_history_k_data_plus(code,
+                                                  "date,close,volume,high,low",
+                                                  start_date=start_date,
+                                                  end_date=end_date,
+                                                  frequency="d",
+                                                  adjustflag="2")
+                data_list = []
+                while (rs.error_code == '0') & rs.next():
+                    data_list.append(rs.get_row_data())
 
-            # 如果返回空数据，说明代码不对或者停牌了
-            if not data_list:
-                print(f"[警告] {code} 未获取到历史数据")
-                return pd.DataFrame()
+                # 如果返回空数据，说明代码不对或者停牌了
+                if not data_list:
+                    print(f"[警告] {code} 未获取到历史数据")
+                    return pd.DataFrame()
 
-            df = pd.DataFrame(data_list, columns=rs.fields)
-            for col in ['close', 'volume', 'high', 'low']:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col])
+                df = pd.DataFrame(data_list, columns=rs.fields)
+                for col in ['close', 'volume', 'high', 'low']:
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col])
 
-            _cache[code] = df
-            return df
+                # 存缓存
+                _cache[code] = df
+                return df
 
         except Exception as e:
             print(f"[警告] 获取 {code} 历史数据失败 (第 {attempt + 1} 次尝试): {e}")

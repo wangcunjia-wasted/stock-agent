@@ -19,10 +19,11 @@ run.py              # 入口：接收用户输入
 graph.py            # LangGraph 编排：串联各个 Agent 与 Manager
 manager.py          # 首席分析师：综合各方意见生成最终报告
 agents/             # 智能体层：每个 Agent 都有独立的大模型 Prompt 和思考逻辑
-├── base.py         # LLM 统一底座（支持 DeepSeek 等）
+├── base.py         # LLM 统一底座
 ├── technical.py    # 技术面 Agent
 ├── fundamental.py  # 基本面 Agent
-└── risk.py         # 风控 Agent
+├── risk.py         # 风控 Agent
+└── news.py         # 新闻面 Agent（结合官方公告与媒体资讯）
 tools/              # 工具层：纯数据计算函数（被 Agent 调用）
 ├── tech_tools.py   # 均线等计算
 ├── fund_tools.py   # 估值计算
