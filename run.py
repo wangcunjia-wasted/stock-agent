@@ -81,8 +81,16 @@ def find_code(user_input):
             print(f"  - {row['name']} ({row['code']})")
         return None
 
-    # 5. 提取代码并格式化（如果只有唯一结果，直接提取）
-    code = str(match.iloc[0]["code"]).zfill(6)
+    # 5. 提取代码并格式化
+    raw_code = match.iloc[0]["code"]
+
+    # 强制转换为浮点数再转整数，彻底消灭可能存在的 .0
+    try:
+        code_int = int(float(raw_code))
+        code = str(code_int).zfill(6)
+    except:
+        # 如果转换失败（比如代码里本来就有字母），直接清理
+        code = str(raw_code).split('.')[0].zfill(6)
 
     if code.startswith("6"):
         return "sh" + code

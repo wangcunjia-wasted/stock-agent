@@ -4,16 +4,20 @@ from agents.technical import run_technical_agent
 from agents.fundamental import run_fundamental_agent
 from agents.risk import run_risk_agent
 from agents.news import run_news_agent
+from agents.dividend import run_dividend_agent
+from tools.dividend_tools import get_dividend_data
 from manager import summarize_reports
 
 
 class State(TypedDict):
     code: str
     bs_code: str
+    div_data: dict  # 分诊台查到的红利基础数据
     technical: str
     fundamental: str
     risk: str
     news: str
+    dividend: str
     report: str
 
 
@@ -21,49 +25,89 @@ def node_technical(state: State):
     print("  -> [Graph] 技术面 Agent 启动...")
     return {"technical": run_technical_agent(state["bs_code"])}
 
+
 def node_fundamental(state: State):
     print("  -> [Graph] 基本面 Agent 启动...")
     return {"fundamental": run_fundamental_agent(state["code"])}
+
 
 def node_risk(state: State):
     print("  -> [Graph] 风控 Agent 启动...")
     return {"risk": run_risk_agent(state["bs_code"])}
 
+
 def node_news(state: State):
     print("  -> [Graph] 新闻面 Agent 启动...")
-    # 传两个参数进去
     return {"news": run_news_agent(state["code"][-6:], state["bs_code"])}
+
+
+def node_dividend(state: State):
+    print("  -> [Graph] 系统识别为红利股，启动红利专项 Agent...")
+    # 不要传 pre_fetched_data 了，让它自己去拉
+    return {"dividend": run_dividend_agent(state["code"])}
+
+
+def node_skip_dividend(state: State):
+    print("  -> [Graph] 股息利差较低，跳过红利专项分析...")
+    return {"dividend": "该股当前股息利差较低，不属于典型红利策略标的，未进行深度分析。"}
+
 
 def node_report(state: State):
     final_report = summarize_reports(
         tech_report=state["technical"],
         fund_report=state["fundamental"],
         risk_report=state["risk"],
-        news_report=state["news"]
+        news_report=state["news"],
+        div_report=state["dividend"]
     )
     return {"report": final_report}
 
 
+# ================= 构建图 =================
 workflow = StateGraph(State)
 
 workflow.add_node("technical", node_technical)
 workflow.add_node("fundamental", node_fundamental)
 workflow.add_node("risk", node_risk)
 workflow.add_node("news", node_news)
+workflow.add_node("dividend", node_dividend)
+workflow.add_node("skip_dividend", node_skip_dividend)
 workflow.add_node("report", node_report)
 
-# 虚拟起点
+# 1. 虚拟起点
 workflow.add_node("start", lambda state: state)
 workflow.set_entry_point("start")
 
-# 并行分发
+
+# 2. 分诊判断逻辑（路由器）
+def triage(state: State):
+    div_info = get_dividend_data(state["code"])
+    spread = div_info.get("spread", 0)
+
+    if spread is not None and spread >= 2.0:
+        return "dividend"
+    else:
+        return "skip_dividend"
+
+
+workflow.add_conditional_edges(
+    "start",
+    triage,
+    {
+        "dividend": "dividend",
+        "skip_dividend": "skip_dividend"
+    }
+)
+
+# 3. 并行分发基础 Agent（它们不管是不是红利，都要跑）
 workflow.add_edge("start", "technical")
 workflow.add_edge("start", "fundamental")
 workflow.add_edge("start", "risk")
 workflow.add_edge("start", "news")
 
-# 汇聚
-workflow.add_edge(["technical", "fundamental", "risk", "news"], "report")
+# 4. 汇聚到 report
+workflow.add_edge(["technical", "fundamental", "risk", "news", "dividend"], "report")
+workflow.add_edge(["technical", "fundamental", "risk", "news", "skip_dividend"], "report")
 workflow.add_edge("report", END)
 
 app = workflow.compile()
