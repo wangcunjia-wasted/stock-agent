@@ -23,18 +23,12 @@ def find_code(user_input):
     if not clean_input:
         clean_input = user_input
 
-    # 3. 加载股票列表（带每日缓存机制）
+    # 3. 加载股票列表（极简版：有缓存就直接用）
     if _stock_list is None:
-        need_download = False
-        if not os.path.exists(CACHE_FILE):
-            need_download = True
+        if os.path.exists(CACHE_FILE):
+            _stock_list = pd.read_csv(CACHE_FILE)
         else:
-            mtime = os.path.getmtime(CACHE_FILE)
-            if time.strftime('%Y-%m-%d', time.localtime(mtime)) != time.strftime('%Y-%m-%d'):
-                need_download = True
-
-        if need_download:
-            print("正在更新最新的股票列表...")
+            print("首次运行，正在拉取全市场股票列表...")
             try:
                 _stock_list = ak.stock_info_a_code_name()
             except Exception:
@@ -45,8 +39,6 @@ def find_code(user_input):
                 _stock_list = _stock_list.rename(columns={"证券代码": "code", "证券简称": "name"})
 
             _stock_list.to_csv(CACHE_FILE, index=False)
-        else:
-            _stock_list = pd.read_csv(CACHE_FILE)
 
     # 4. 匹配逻辑（智能模糊搜索）
     # 第一层：精确匹配
@@ -76,7 +68,6 @@ def find_code(user_input):
     # 终极判定：匹配到多个，让用户自己选（防止瞎猜）
     if len(match) > 1:
         print(f"您输入的 '{user_input}' 匹配到了多只股票，请指明具体是哪一只：")
-        # 最多展示前 5 个
         for idx, row in match.head(5).iterrows():
             print(f"  - {row['name']} ({row['code']})")
         return None
@@ -89,7 +80,6 @@ def find_code(user_input):
         code_int = int(float(raw_code))
         code = str(code_int).zfill(6)
     except:
-        # 如果转换失败（比如代码里本来就有字母），直接清理
         code = str(raw_code).split('.')[0].zfill(6)
 
     if code.startswith("6"):
@@ -113,7 +103,7 @@ if __name__ == "__main__":
         result = app.invoke({"code": code, "bs_code": bs_code})
         t2 = time.time()
         print(f"[计时] 图流转+LLM: {t2 - t1:.2f}秒")
-        print("\n最终报告\n")
+        print("\n================ 最终报告 ================\n")
         print(result["report"])
 
     # 程序结束时登出 Baostock，安全保护

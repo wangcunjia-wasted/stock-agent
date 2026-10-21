@@ -49,8 +49,8 @@ def node_dividend(state: State):
 
 def node_skip_dividend(state: State):
     print("  -> [Graph] 股息利差较低，跳过红利专项分析...")
-    return {"dividend": "该股当前股息利差较低，不属于典型红利策略标的，未进行深度分析。"}
-
+    # 【修改这里】：不要给 Manager 传提示文本，直接传空
+    return {"dividend": ""}
 
 def node_report(state: State):
     final_report = summarize_reports(
