@@ -91,6 +91,10 @@ def find_code(user_input):
 
 
 if __name__ == "__main__":
+    # 启动后台维护：日更 panel 数据 / 月更重训模型（不阻塞、不抛异常）
+    from tools.auto_maintain import start_maintenance
+    start_maintenance()
+
     raw = input("请输入股票名称或代码（如：贵州茅台 / 600519）：").strip()
 
     t0 = time.time()

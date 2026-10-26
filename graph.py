@@ -5,6 +5,7 @@ from agents.fundamental import run_fundamental_agent
 from agents.risk import run_risk_agent
 from agents.news import run_news_agent
 from agents.dividend import run_dividend_agent
+from agents.forecast import run_forecast_agent
 from tools.dividend_tools import get_dividend_data
 from manager import summarize_reports
 
@@ -18,6 +19,7 @@ class State(TypedDict):
     risk: str
     news: str
     dividend: str
+    forecast: str   # 量化预测 Agent：沪深300横截面相对强弱（Forecast Agent）
     report: str
 
 
@@ -47,6 +49,16 @@ def node_dividend(state: State):
     return {"dividend": run_dividend_agent(state["code"])}
 
 
+def node_forecast(state: State):
+    print("  -> [Graph] 量化预测 Agent 启动...")
+    try:
+        return {"forecast": run_forecast_agent(state["code"], state["bs_code"])}
+    except Exception as e:
+        # 量化预测是增量能力：模型/缓存缺失只降级，不拖垮整张图
+        print(f"  -> [Graph] 量化预测失败（降级为空，不影响其他分析）: {e}")
+        return {"forecast": ""}
+
+
 def node_skip_dividend(state: State):
     print("  -> [Graph] 股息利差较低，跳过红利专项分析...")
     # 【修改这里】：不要给 Manager 传提示文本，直接传空
@@ -58,7 +70,8 @@ def node_report(state: State):
         fund_report=state["fundamental"],
         risk_report=state["risk"],
         news_report=state["news"],
-        div_report=state["dividend"]
+        div_report=state["dividend"],
+        forecast_report=state.get("forecast", "")
     )
     return {"report": final_report}
 
@@ -72,6 +85,7 @@ workflow.add_node("risk", node_risk)
 workflow.add_node("news", node_news)
 workflow.add_node("dividend", node_dividend)
 workflow.add_node("skip_dividend", node_skip_dividend)
+workflow.add_node("forecast", node_forecast)
 workflow.add_node("report", node_report)
 
 # 1. 虚拟起点
@@ -104,10 +118,11 @@ workflow.add_edge("start", "technical")
 workflow.add_edge("start", "fundamental")
 workflow.add_edge("start", "risk")
 workflow.add_edge("start", "news")
+workflow.add_edge("start", "forecast")   # 量化预测：沪深300成分股横截面打分
 
 # 4. 汇聚到 report
-workflow.add_edge(["technical", "fundamental", "risk", "news", "dividend"], "report")
-workflow.add_edge(["technical", "fundamental", "risk", "news", "skip_dividend"], "report")
+workflow.add_edge(["technical", "fundamental", "risk", "news", "forecast", "dividend"], "report")
+workflow.add_edge(["technical", "fundamental", "risk", "news", "forecast", "skip_dividend"], "report")
 workflow.add_edge("report", END)
 
 app = workflow.compile()
